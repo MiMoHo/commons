@@ -1,6 +1,7 @@
 package org.fossify.commons.helpers
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.ContactsContract.CommonDataKinds.Event
@@ -13,6 +14,9 @@ import org.fossify.commons.models.contacts.Contact
 import org.fossify.commons.models.contacts.Group
 import org.fossify.commons.models.contacts.LocalContact
 import org.fossify.commons.models.contacts.Organization
+
+// Keep contact photo blobs comfortably under the 2 MB SQLite CursorWindow row limit.
+private const val MAX_PHOTO_BLOB_SIZE = 1024 * 1024
 
 class LocalContactsHelper(val context: Context) {
     fun getAllContacts(favoritesOnly: Boolean = false): ArrayList<Contact> {
@@ -77,10 +81,38 @@ class LocalContactsHelper(val context: Context) {
         val photoUri = Uri.parse(uri)
         val bitmap = MediaStore.Images.Media.getBitmap(context.contentResolver, photoUri)
 
-        val fullSizePhotoData = bitmap.getByteArray()
+        val photoData = bitmap.getPhotoDataForDB()
         bitmap.recycle()
 
-        return fullSizePhotoData
+        return photoData
+    }
+
+    // The photo is stored as a JPEG blob inside the "contacts" Room table. Room reads rows
+    // through a SQLiteCursor whose CursorWindow is limited to 2 MB per row, so a high
+    // resolution / high detail photo can produce a blob that exceeds the window. Once such a
+    // row is written, every "SELECT * FROM contacts" throws SQLiteBlobTooBigException, which
+    // crashes the app on launch. Scale the photo down until its blob stays well below the
+    // limit before persisting it.
+    private fun Bitmap.getPhotoDataForDB(): ByteArray {
+        var scaledBitmap = this
+        var byteArray = scaledBitmap.getByteArray()
+        while (byteArray.size > MAX_PHOTO_BLOB_SIZE && scaledBitmap.width > 2 && scaledBitmap.height > 2) {
+            val newBitmap = Bitmap.createScaledBitmap(
+                scaledBitmap, scaledBitmap.width / 2, scaledBitmap.height / 2, true
+            )
+            if (scaledBitmap != this) {
+                scaledBitmap.recycle()
+            }
+
+            scaledBitmap = newBitmap
+            byteArray = scaledBitmap.getByteArray()
+        }
+
+        if (scaledBitmap != this) {
+            scaledBitmap.recycle()
+        }
+
+        return byteArray
     }
 
     private fun convertLocalContactToContact(localContact: LocalContact?, storedGroups: ArrayList<Group>): Contact? {
@@ -129,7 +161,7 @@ class LocalContactsHelper(val context: Context) {
         val photoByteArray = if (contact.photoUri.isNotEmpty()) {
             getPhotoByteArray(contact.photoUri)
         } else {
-            contact.photo?.getByteArray()
+            contact.photo?.getPhotoDataForDB()
         }
 
         return getEmptyLocalContact().apply {
