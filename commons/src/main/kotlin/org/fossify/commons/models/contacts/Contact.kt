@@ -182,6 +182,7 @@ data class Contact(
 
         return when {
             fullName.isNotBlank() -> fullName
+            nickname.isNotBlank() -> nickname
             organization.isNotBlank() -> organization
             !email.isNullOrBlank() -> email
             !phoneNumber.isNullOrBlank() -> phoneNumber
