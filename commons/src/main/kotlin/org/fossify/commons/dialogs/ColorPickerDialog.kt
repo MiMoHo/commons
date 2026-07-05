@@ -278,6 +278,8 @@ private fun DialogColorPickerBinding.init(
     colorPickerHue.setOnTouchListener(OnTouchListener { v, event ->
         if (event.action == MotionEvent.ACTION_DOWN) {
             isHueBeingDragged = true
+            // Keep the enclosing ScrollView from stealing the vertical drag (issue #163).
+            v.parent.requestDisallowInterceptTouchEvent(true)
         }
 
         if (event.action == MotionEvent.ACTION_MOVE || event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_UP) {
@@ -305,6 +307,11 @@ private fun DialogColorPickerBinding.init(
     })
 
     colorPickerSquare.setOnTouchListener(OnTouchListener { v, event ->
+        if (event.action == MotionEvent.ACTION_DOWN) {
+            // Keep the enclosing ScrollView from stealing the drag (issue #163).
+            v.parent.requestDisallowInterceptTouchEvent(true)
+        }
+
         if (event.action == MotionEvent.ACTION_MOVE || event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_UP) {
             var x = event.x
             var y = event.y
